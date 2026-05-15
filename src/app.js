@@ -13,7 +13,11 @@ const documentRoutes = require('./routes/documentRoutes');
 const vehicleRoutes = require('./routes/vehicleRoutes');
 const vehicleDocumentRoutes = require('./routes/vehicleDocumentRoutes');
 const fileRoutes = require('./routes/fileRoutes');
-
+const webfleetRoutes = require('./routes/webfleetRoutes');
+const quartixRoutes = require('./routes/quartixRoutes');
+const optifleetRoutes = require('./routes/optifleetRoutes');
+const trackingRoutes = require('./routes/trackingRoutes');
+const taskRoutes = require('./routes/taskRoutes');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
 const app = express();
@@ -37,7 +41,11 @@ app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/drivers', documentRoutes);
 app.use('/api/vehicles', vehicleDocumentRoutes);
 app.use('/api/files', fileRoutes);
-
+app.use('/api/webfleet', webfleetRoutes);
+app.use('/api/quartix', quartixRoutes);
+app.use('/api/optifleet', optifleetRoutes);
+app.use('/api/tracking', trackingRoutes);
+app.use('/api/tasks', taskRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
