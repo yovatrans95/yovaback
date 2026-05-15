@@ -2,6 +2,7 @@ const express = require('express');
 const { protect } = require('../middleware/authMiddleware');
 
 const router = express.Router();
+
 console.log("TRACKING ENV CHECK =", {
   webfleetAccount: !!process.env.WEBFLEET_ACCOUNT,
   webfleetUsername: !!process.env.WEBFLEET_USERNAME,
@@ -17,58 +18,97 @@ console.log("TRACKING ENV CHECK =", {
   optifleetPassword: !!process.env.OPTIFLEET_PASSWORD,
   optifleetBaseUrl: !!process.env.OPTIFLEET_BASE_URL
 });
+
 router.get('/vehicles', protect, async (req, res) => {
   try {
-    const baseUrl = `${req.protocol}://${req.get('host')}/api`;
+    /**
+     * IMPORTANT :
+     * En local, req.protocol = http.
+     * En prod derrière Render / proxy / Cloudflare, req.protocol peut rester http
+     * même si ton domaine est en https.
+     *
+     * Donc on force l'URL publique depuis l'env si disponible.
+     */
+    const baseUrl =
+      process.env.PUBLIC_API_URL ||
+      process.env.API_PUBLIC_URL ||
+      process.env.BACKEND_URL ||
+      `${req.headers['x-forwarded-proto'] || req.protocol}://${req.get('host')}/api`;
+
+    const cleanBaseUrl = baseUrl.replace(/\/$/, '');
 
     const headers = {
-      Authorization: req.headers.authorization || ''
+      Authorization: req.headers.authorization || '',
+      Accept: 'application/json'
     };
 
+    console.log("TRACKING INTERNAL BASE URL =", cleanBaseUrl);
+
     const [webfleetRes, quartixRes, optifleetRes] = await Promise.allSettled([
-      fetch(`${baseUrl}/webfleet/vehicles`, { headers }),
-      fetch(`${baseUrl}/quartix/vehicles`, { headers }),
-      fetch(`${baseUrl}/optifleet/vehicles`, { headers })
+      fetch(`${cleanBaseUrl}/webfleet/vehicles`, { headers }),
+      fetch(`${cleanBaseUrl}/quartix/vehicles`, { headers }),
+      fetch(`${cleanBaseUrl}/optifleet/vehicles`, { headers })
     ]);
 
-    const webfleet = await extractVehicles(webfleetRes);
-    const quartix = await extractVehicles(quartixRes);
-    const optifleet = await extractVehicles(optifleetRes);
+    const webfleet = await extractVehicles('webfleet', webfleetRes);
+    const quartix = await extractVehicles('quartix', quartixRes);
+    const optifleet = await extractVehicles('optifleet', optifleetRes);
+
+    console.log("TRACKING PROVIDER COUNTS =", {
+      webfleet: webfleet.length,
+      quartix: quartix.length,
+      optifleet: optifleet.length
+    });
 
     const byPlate = new Map();
 
-    // 1. Webfleet d'abord = priorité
     webfleet.forEach(vehicle => {
       const key = normalizePlate(vehicle.immatriculation);
-      if (key) byPlate.set(key, { ...vehicle, provider: 'webfleet' });
-    });
-
-    // 2. Quartix seulement si pas déjà Webfleet
-    quartix.forEach(vehicle => {
-      const key = normalizePlate(vehicle.immatriculation);
-      if (key && !byPlate.has(key)) {
-        byPlate.set(key, { ...vehicle, provider: 'quartix' });
+      if (key) {
+        byPlate.set(key, {
+          ...vehicle,
+          provider: 'webfleet'
+        });
       }
     });
 
-    // 3. Optifleet seulement si pas déjà Webfleet/Quartix
+    quartix.forEach(vehicle => {
+      const key = normalizePlate(vehicle.immatriculation);
+      if (key && !byPlate.has(key)) {
+        byPlate.set(key, {
+          ...vehicle,
+          provider: 'quartix'
+        });
+      }
+    });
+
     optifleet.forEach(vehicle => {
       const key = normalizePlate(vehicle.immatriculation);
       if (key && !byPlate.has(key)) {
-        byPlate.set(key, { ...vehicle, provider: 'optifleet' });
+        byPlate.set(key, {
+          ...vehicle,
+          provider: 'optifleet'
+        });
       }
     });
 
     const vehicles = Array.from(byPlate.values());
 
+    console.log("TRACKING FINAL =", {
+      count: vehicles.length,
+      firstVehicle: vehicles[0] || null
+    });
+
     res.json({
       success: true,
       count: vehicles.length,
+      updatedAt: new Date().toISOString(),
       vehicles
     });
 
   } catch (error) {
-    console.error('Erreur tracking fusion:', error.message);
+    console.error('Erreur tracking fusion:', error);
+
     res.status(500).json({
       success: false,
       message: 'Erreur récupération tracking multi-fournisseurs',
@@ -77,22 +117,53 @@ router.get('/vehicles', protect, async (req, res) => {
   }
 });
 
-async function extractVehicles(result) {
+async function extractVehicles(providerName, result) {
   try {
-    if (result.status !== 'fulfilled') return [];
+    if (result.status !== 'fulfilled') {
+      console.error(`❌ ${providerName} fetch rejected:`, result.reason?.message || result.reason);
+      return [];
+    }
 
     const response = result.value;
-    if (!response.ok) return [];
 
-    const data = await response.json();
-    return data.vehicles || [];
-  } catch {
+    console.log(`${providerName.toUpperCase()} HTTP STATUS =`, response.status, response.statusText);
+
+    const text = await response.text();
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
+
+    if (!response.ok) {
+      console.error(`❌ ${providerName} response not ok:`, {
+        status: response.status,
+        statusText: response.statusText,
+        body: text.slice(0, 1000)
+      });
+      return [];
+    }
+
+    const vehicles = Array.isArray(data?.vehicles) ? data.vehicles : [];
+
+    console.log(`${providerName.toUpperCase()} VEHICLES COUNT =`, vehicles.length);
+
+    if (vehicles[0]) {
+      console.log(`${providerName.toUpperCase()} FIRST VEHICLE =`, vehicles[0]);
+    }
+
+    return vehicles;
+
+  } catch (error) {
+    console.error(`❌ ${providerName} extract error:`, error.message || error);
     return [];
   }
 }
 
 function normalizePlate(value = '') {
-  const clean = String(value).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const clean = String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const match = clean.match(/^([A-Z]{2})(\d{3})([A-Z]{2})$/);
   return match ? `${match[1]}-${match[2]}-${match[3]}` : clean;
 }
