@@ -2,7 +2,19 @@ const express = require('express');
 const { protect } = require('../middleware/authMiddleware');
 
 const router = express.Router();
+console.log("TRACKING ENV CHECK =", {
+  webfleetAccount: !!process.env.WEBFLEET_ACCOUNT,
+  webfleetUsername: !!process.env.WEBFLEET_USERNAME,
+  webfleetPassword: !!process.env.WEBFLEET_PASSWORD,
+  webfleetApiKey: !!process.env.WEBFLEET_APIKEY,
 
+  quartixUsername: !!process.env.QUARTIX_USERNAME,
+  quartixPassword: !!process.env.QUARTIX_PASSWORD,
+  quartixApiKey: !!process.env.QUARTIX_APIKEY,
+
+  optifleetClientId: !!process.env.OPTIFLEET_CLIENT_ID,
+  optifleetSecret: !!process.env.OPTIFLEET_CLIENT_SECRET
+});
 router.get('/vehicles', protect, async (req, res) => {
   try {
     const baseUrl = `${req.protocol}://${req.get('host')}/api`;
