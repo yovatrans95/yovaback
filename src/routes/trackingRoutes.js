@@ -8,12 +8,14 @@ console.log("TRACKING ENV CHECK =", {
   webfleetPassword: !!process.env.WEBFLEET_PASSWORD,
   webfleetApiKey: !!process.env.WEBFLEET_APIKEY,
 
+  quartixApplication: !!process.env.QUARTIX_APPLICATION,
+  quartixCustomerId: !!process.env.QUARTIX_CUSTOMER_ID,
   quartixUsername: !!process.env.QUARTIX_USERNAME,
   quartixPassword: !!process.env.QUARTIX_PASSWORD,
-  quartixApiKey: !!process.env.QUARTIX_APIKEY,
 
-  optifleetClientId: !!process.env.OPTIFLEET_CLIENT_ID,
-  optifleetSecret: !!process.env.OPTIFLEET_CLIENT_SECRET
+  optifleetUsername: !!process.env.OPTIFLEET_USERNAME,
+  optifleetPassword: !!process.env.OPTIFLEET_PASSWORD,
+  optifleetBaseUrl: !!process.env.OPTIFLEET_BASE_URL
 });
 router.get('/vehicles', protect, async (req, res) => {
   try {
