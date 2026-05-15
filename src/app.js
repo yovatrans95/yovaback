@@ -23,7 +23,12 @@ const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 const app = express();
 
 app.use(cors({
-  origin: process.env.CLIENT_URL || true,
+  origin: [
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "https://front-j4x8.onrender.com",
+    "https://admin.yovatrans.fr"
+  ],
   credentials: true
 }));
 app.use(morgan('dev'));
