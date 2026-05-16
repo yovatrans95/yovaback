@@ -31,18 +31,52 @@ router.get('/', protect, async (req, res) => {
   }
 });
 
+// Liste de référence des clients connus Yovatrans.
+// Source : tableau de bord Excel — édite directement ici si nouveau client.
+const KNOWN_CLIENTS = [
+  'MAUFFREY',
+  'MEDINGER',
+  'ROISSY TP',
+  'MYMAT',
+  'SOLVALOR',
+  'MYBEN',
+  'PRUNIERES TP',
+  'TERAFORM',
+  'GLEIZON',
+  'EXTRACT',
+  'GAIA',
+  'PETITDIDIER',
+  'SATM',
+  'KONCRETE',
+  'WIAME TP',
+  'TRANSKRS',
+  'BPE LECIEUX',
+  'KOKO TRANSPORT',
+  'LOCHIAM',
+  'A LA VOLEE'
+];
+
 // ─── GET /api/planning/clients/list ───────────────────────────────────────
-// IMPORTANT : avant /:chauffeurId/:date sinon Express interprète "clients"
-// comme un chauffeurId
+// Renvoie l'union de la liste de référence et des clients "manuel" déjà
+// saisis dans les plannings, dédupliquée (insensible à la casse) et triée.
 router.get('/clients/list', protect, async (req, res) => {
   try {
     const result = await Planning.aggregate([
       { $unwind: '$tours' },
       { $match: { 'tours.clientSource': 'manuel' } },
-      { $group: { _id: '$tours.client' } },
-      { $sort: { _id: 1 } }
+      { $group: { _id: '$tours.client' } }
     ]);
-    const clients = result.map(r => r._id).filter(Boolean);
+    const fromDb = result.map(r => r._id).filter(Boolean);
+
+    // Dédoublonnage insensible à la casse — la 1ère occurrence (donc celle
+    // de KNOWN_CLIENTS) garde sa graphie.
+    const seen = new Map();
+    [...KNOWN_CLIENTS, ...fromDb].forEach(c => {
+      const key = String(c).trim().toUpperCase();
+      if (key && !seen.has(key)) seen.set(key, String(c).trim());
+    });
+
+    const clients = [...seen.values()].sort((a, b) => a.localeCompare(b, 'fr'));
     res.json(clients);
   } catch (err) {
     res.status(500).json({ message: err.message });
