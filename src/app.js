@@ -51,6 +51,7 @@ app.use('/api/quartix', quartixRoutes);
 app.use('/api/optifleet', optifleetRoutes);
 app.use('/api/tracking', trackingRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/planning', require('./routes/planning'))
 app.use(notFound);
 app.use(errorHandler);
 
