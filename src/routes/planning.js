@@ -180,4 +180,53 @@ router.delete('/:chauffeurId/:date/tours/:tourId', protect, async (req, res) => 
   }
 });
 
+// ─── PATCH /api/planning/:chauffeurId/:date/reorder ────────────────────────
+// Body: { ordre: [tourId, tourId, ...] }
+// Réordonne physiquement le tableau "tours" du document Planning selon la
+// liste d'IDs fournie. Tout tour non listé dans "ordre" est conservé à la fin
+// (par sécurité, pour ne pas perdre de données en cas de désynchro).
+router.patch('/:chauffeurId/:date/reorder', protect, async (req, res) => {
+  try {
+    const { chauffeurId, date } = req.params;
+    const { ordre } = req.body;
+
+    if (!Array.isArray(ordre)) {
+      return res.status(400).json({ message: 'Le champ "ordre" doit être un tableau d\'IDs.' });
+    }
+
+    const planning = await Planning.findOne({ chauffeurId, date });
+    if (!planning) return res.status(404).json({ message: 'Planning introuvable' });
+
+    // Index des tours par ID pour un accès O(1)
+    const byId = new Map();
+    planning.tours.forEach(t => byId.set(String(t._id), t));
+
+    // Reconstruire dans l'ordre demandé (en ignorant les IDs inconnus)
+    const newTours = [];
+    const seen = new Set();
+    ordre.forEach(id => {
+      const key = String(id);
+      const t = byId.get(key);
+      if (t && !seen.has(key)) {
+        newTours.push(t);
+        seen.add(key);
+      }
+    });
+
+    // Filet de sécurité : on rajoute à la fin les tours non listés (s'il y en a)
+    planning.tours.forEach(t => {
+      const key = String(t._id);
+      if (!seen.has(key)) newTours.push(t);
+    });
+
+    // Remplacement du tableau Mongoose
+    planning.tours.splice(0, planning.tours.length, ...newTours);
+
+    await planning.save();
+    res.json(planning);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
 module.exports = router;
