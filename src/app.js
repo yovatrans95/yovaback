@@ -23,15 +23,33 @@ const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 const app = express();
 
 app.use(cors({
-  origin: [
-    "http://localhost:5500",
-    "http://localhost:3000",
-    "http://localhost:5501" ,
-    "http://127.0.0.1:5500",
-    "https://yovatrans.netlify.app",
-    "https://front-j4x8.onrender.com",
-    "https://admin.yovatrans.fr"
-  ],
+  origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, Capacitor, curl, etc.)
+    if (!origin) return callback(null, true);
+
+    const allowed = [
+      "http://localhost:5500",
+      "http://localhost:3000",
+      "http://localhost:5501",
+      "http://127.0.0.1:5500",
+      "https://yovatrans.netlify.app",
+      "https://front-j4x8.onrender.com",
+      "https://admin.yovatrans.fr",
+      // Capacitor / Android WebView
+      "https://localhost",
+      "http://localhost",
+      "capacitor://localhost",
+      "ionic://localhost",
+    ];
+
+    if (allowed.includes(origin)) return callback(null, true);
+
+    // Allow any *.yovatrans.fr subdomain
+    if (/^https?:\/\/([a-z0-9-]+\.)?yovatrans\.fr$/.test(origin)) return callback(null, true);
+
+    // Block everything else
+    return callback(new Error("CORS non autorisé : " + origin));
+  },
   credentials: true
 }));
 app.use(morgan('dev'));
