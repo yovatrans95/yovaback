@@ -44,6 +44,15 @@ const tourSchema = new mongoose.Schema({
   lieuChantier: { type: String, default: '' },
   // Régie : nombre de tours (allers-retours) effectués sur la journée
   nombreTours: { type: Number, default: 0, min: 0 },
+  // Régie : détail par tour (chargement / déchargement), certaines régies
+  // n'ayant pas les mêmes lieux d'un tour à l'autre.
+  regieTours: {
+    type: [new mongoose.Schema({
+      chargement:   { type: String, default: '' },
+      dechargement: { type: String, default: '' }
+    }, { _id: false })],
+    default: []
+  },
   notes: {
     type: String,
     default: ''

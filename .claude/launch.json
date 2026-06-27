@@ -6,6 +6,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["serve", "-p", "3000", "C:\\Users\\yovat\\dev\\front"],
       "port": 3000
+    },
+    {
+      "name": "yovatrans-backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5000
     }
   ]
 }

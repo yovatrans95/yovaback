@@ -24,6 +24,19 @@ const vehicleDocumentSchema = new mongoose.Schema(
   { _id: true }
 );
 
+// Lien vers un véhicule tel que connu chez un fournisseur de géolocalisation.
+// Permet un matching fiable (par identifiant fournisseur) en plus de la plaque,
+// et de savoir d'où vient le véhicule + quand il a été vu pour la dernière fois.
+const vehicleSourceSchema = new mongoose.Schema(
+  {
+    provider: { type: String, enum: ['webfleet', 'quartix', 'optifleet'] },
+    providerId: String,
+    providerName: String,
+    lastSeenAt: Date
+  },
+  { _id: false }
+);
+
 const vehicleSchema = new mongoose.Schema(
   {
     immatriculation: { type: String, required: true, trim: true, uppercase: true },
@@ -52,6 +65,16 @@ const vehicleSchema = new mongoose.Schema(
     },
 
     observations: String,
+
+    // Origine de la fiche : saisie manuelle ou créée automatiquement depuis un fournisseur.
+    origin: {
+      type: String,
+      enum: ['manuel', 'auto'],
+      default: 'manuel'
+    },
+
+    // Fournisseurs de géolocalisation où ce véhicule est connu.
+    sources: { type: [vehicleSourceSchema], default: [] },
 
     carte_grise_numero: String,
     carte_grise_date_emission: Date,
@@ -108,6 +131,8 @@ const vehicleSchema = new mongoose.Schema(
 
 
 vehicleSchema.index({ immatriculation: 1 }, { unique: true });
+vehicleSchema.index({ 'sources.provider': 1, 'sources.providerId': 1 });
+vehicleSchema.index({ origin: 1 });
 vehicleSchema.index({ statut: 1 });
 vehicleSchema.index({ mode_possession: 1 });
 vehicleSchema.index({ assurance_expiration: 1 });

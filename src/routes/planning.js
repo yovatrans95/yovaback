@@ -149,6 +149,7 @@ router.patch('/:chauffeurId/:date/tours/:tourId', protect, async (req, res) => {
       'destination',
       'lieuChantier',
       'nombreTours',
+      'regieTours',
       'refTransport',
       'dashdocId',
       'notes'

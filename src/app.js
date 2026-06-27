@@ -17,6 +17,8 @@ const webfleetRoutes = require('./routes/webfleetRoutes');
 const quartixRoutes = require('./routes/quartixRoutes');
 const optifleetRoutes = require('./routes/optifleetRoutes');
 const trackingRoutes = require('./routes/trackingRoutes');
+const ingestionRoutes = require('./routes/ingestionRoutes');
+const historyRoutes = require('./routes/historyRoutes');
 const taskRoutes = require('./routes/taskRoutes');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
@@ -64,6 +66,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/drivers', driverRoutes);
 app.use('/api/vehicles', vehicleRoutes);
+app.use('/api/vehicles', historyRoutes);
 app.use('/api/drivers', documentRoutes);
 app.use('/api/vehicles', vehicleDocumentRoutes);
 app.use('/api/files', fileRoutes);
@@ -71,6 +74,7 @@ app.use('/api/webfleet', webfleetRoutes);
 app.use('/api/quartix', quartixRoutes);
 app.use('/api/optifleet', optifleetRoutes);
 app.use('/api/tracking', trackingRoutes);
+app.use('/api/ingestion', ingestionRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/planning', require('./routes/planning'))
 app.use(notFound);
