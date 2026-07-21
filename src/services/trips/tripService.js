@@ -308,17 +308,45 @@ async function archiveTripsForRange({ from, to }) {
   return { providerErrors: errors, found, upserted };
 }
 
-// Lit les trajets d'un véhicule, en complétant d'abord les jours manquants.
+// Vrai s'il reste au moins un couple (fournisseur, jour passé) non archivé dans
+// la plage : la complétion tournera en arrière-plan et le client pourra
+// re-demander la liste peu après pour récupérer les trajets fraîchement archivés.
+async function hasPendingPastCoverage({ from, to }) {
+  const now = new Date();
+  const todayStart = startOfDay(now);
+  const effectiveTo = to > now ? now : to;
+  const pastKeys = daysInRange(from, effectiveTo).filter(d => d < todayStart).map(dayString);
+  if (!pastKeys.length) return false;
+
+  for (const provider of PROVIDERS) {
+    const covered = new Set(
+      (await ArchiveDay.find({ provider, day: { $in: pastKeys } }).select('day').lean()).map(x => x.day)
+    );
+    if (pastKeys.some(k => !covered.has(k))) return true;
+  }
+  return false;
+}
+
+// Lit les trajets d'un véhicule.
+// - refresh=true  : re-fetch complet bloquant (bouton « Rafraîchir »).
+// - refresh=false : réponse IMMÉDIATE avec ce qui est déjà en base ; les jours
+//   passés manquants sont complétés EN ARRIÈRE-PLAN (non bloquant). `pending`
+//   indique au client qu'une complétion est en cours et qu'il peut re-demander.
 async function getTripsForVehicle(vehicleId, { from, to, refresh = false } = {}) {
   const vehicle = await Vehicle.findById(vehicleId).select('_id immatriculation').lean();
   if (!vehicle) return null;
 
   let coverage = { errors: {} };
+  let pending = false;
+
   if (refresh) {
     const result = await archiveTripsForRange({ from, to });
     coverage = { errors: result.providerErrors };
   } else {
-    coverage = await ensureCoverage({ from, to });
+    // On ne bloque plus la réponse sur les appels fournisseurs : c'était la cause
+    // de la lenteur au premier chargement des trajets passés.
+    pending = await hasPendingPastCoverage({ from, to });
+    ensureCoverage({ from, to }); // volontairement sans await (sérialisé en interne)
   }
 
   const query = {
@@ -331,7 +359,7 @@ async function getTripsForVehicle(vehicleId, { from, to, refresh = false } = {})
   }
 
   const trips = await Trip.find(query).sort({ startAt: -1 }).lean();
-  return { trips, providerErrors: coverage.errors || {} };
+  return { trips, providerErrors: coverage.errors || {}, pending };
 }
 
 module.exports = { archiveTripsForRange, getTripsForVehicle, ensureCoverage };

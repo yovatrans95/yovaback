@@ -12,6 +12,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5000
+    },
+    {
+      "name": "pdf-harness",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:\\Users\\yovat\\AppData\\Local\\Temp\\claude\\C--Users-yovat-dev-back\\6ae8957f-cdee-4dfa-bcb1-98619a89dadb\\scratchpad\\serve.js"],
+      "port": 4599
     }
   ]
 }

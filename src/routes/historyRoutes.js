@@ -34,6 +34,7 @@ router.get('/:id/trips', protect, async (req, res) => {
     to: range.to.toISOString(),
     count: result.trips.length,
     providerErrors: result.providerErrors,
+    pending: result.pending || false,
     trips: result.trips
   });
 });
