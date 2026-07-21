@@ -55,7 +55,8 @@ app.use(cors({
   credentials: true
 }));
 app.use(morgan('dev'));
-app.use(express.json());
+// Limite relevée : l'envoi WhatsApp peut inclure une feuille de tournée PDF en base64.
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
@@ -77,6 +78,7 @@ app.use('/api/tracking', trackingRoutes);
 app.use('/api/ingestion', ingestionRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/planning', require('./routes/planning'))
+app.use('/api/whatsapp', require('./routes/whatsappRoutes'));
 app.use(notFound);
 app.use(errorHandler);
 

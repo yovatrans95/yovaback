@@ -1,6 +1,7 @@
 // Normalisation des trajets fournisseurs vers la forme commune du modèle Trip.
 
 const { normalizePlate, extractPlate } = require('../providers/plate');
+const { isInOperatingZone } = require('./zone');
 
 // Webfleet renvoie les dates en "DD/MM/YYYY HH:mm:ss" (heure locale du compte).
 function parseWebfleetDate(value) {
@@ -13,6 +14,22 @@ function parseWebfleetDate(value) {
 const microDeg = v => (v == null || v === '' ? null : Number(v) / 1e6);
 const num = v => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
 
+// Neutralise les extrémités hors zone d'exploitation (glitch GPS fournisseur :
+// 0,0 ou coordonnées corrompues). Le trajet est conservé — distance, durée et
+// adresse fournisseur restent valables — mais on ne stocke pas de point faux
+// qui fausserait la carte et le géocodage.
+function sanitizeTripCoords(trip) {
+  if (trip.startLat != null && !isInOperatingZone(trip.startLat, trip.startLng)) {
+    trip.startLat = null;
+    trip.startLng = null;
+  }
+  if (trip.endLat != null && !isInOperatingZone(trip.endLat, trip.endLng)) {
+    trip.endLat = null;
+    trip.endLng = null;
+  }
+  return trip;
+}
+
 // Webfleet : distance en mètres, durée/ralenti en secondes, coords en microdegrés.
 function normalizeWebfleetTrip(t) {
   const startAt = parseWebfleetDate(t.start_time);
@@ -21,7 +38,7 @@ function normalizeWebfleetTrip(t) {
 
   const plate = extractPlate(t.objectname) || null;
 
-  return {
+  return sanitizeTripCoords({
     provider: 'webfleet',
     providerVehicleId: t.objectno != null ? String(t.objectno) : null,
     providerTripId: t.tripid != null ? String(t.tripid) : null,
@@ -42,7 +59,7 @@ function normalizeWebfleetTrip(t) {
     driverName: t.drivername || null,
     path: [],
     source: 'provider'
-  };
+  });
 }
 
 // Quartix : distance en km, TravelTime/IdlingTime en JOURS, coords décimales.
@@ -51,7 +68,7 @@ function normalizeQuartixTrip(t) {
   const endAt = t.EndDateTime ? new Date(t.EndDateTime) : null;
   if (!startAt || !endAt) return null;
 
-  return {
+  return sanitizeTripCoords({
     provider: 'quartix',
     providerVehicleId: t.VehicleID != null ? String(t.VehicleID) : null,
     providerTripId: null,
@@ -72,7 +89,7 @@ function normalizeQuartixTrip(t) {
     driverName: t.DriverID ? String(t.DriverID) : null,
     path: [],
     source: 'provider'
-  };
+  });
 }
 
 module.exports = {

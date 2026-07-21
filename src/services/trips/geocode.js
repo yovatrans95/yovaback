@@ -7,6 +7,8 @@
 // camions passent en boucle (rotations chantier/carrière). L'adresse est ensuite
 // stockée dans le document Trip : on ne géocode donc que les nouveaux trajets.
 
+const { isInOperatingZone } = require('./zone');
+
 const BAN_REVERSE_URL = 'https://api-adresse.data.gouv.fr/reverse/';
 const GEO_COMMUNES_URL = 'https://geo.api.gouv.fr/communes';
 
@@ -43,6 +45,9 @@ async function communeReverse(lat, lng) {
 
 async function reverseGeocode(lat, lng) {
   if (lat == null || lng == null) return '';
+  // Hors zone d'exploitation (centre-nord de la France) = coordonnées glitchées :
+  // inutile de dépenser 2 appels HTTP pour une adresse qui serait fausse.
+  if (!isInOperatingZone(Number(lat), Number(lng))) return '';
 
   const key = `${Number(lat).toFixed(4)},${Number(lng).toFixed(4)}`;
   if (cache.has(key)) return cache.get(key);

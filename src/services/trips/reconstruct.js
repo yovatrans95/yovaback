@@ -7,6 +7,8 @@
 //     MIN_STOP_MINUTES (chargement, chantier, pause), on coupe le trajet là.
 //     Un bouchon ne coupe pas : même au pas, on sort du rayon en quelques minutes.
 
+const { isInOperatingZone } = require('./zone');
+
 const GAP_MINUTES = 12;       // trou de temps qui sépare deux trajets
 const MIN_DISTANCE_KM = 0.3;  // en-dessous : on ignore (bruit GPS / manœuvre)
 const STOP_RADIUS_M = 180;    // rayon d'immobilité : on considère le camion "au même endroit"
@@ -28,7 +30,9 @@ function toPoint(p) {
   const g = p.gnssPosition || {};
   const lat = Number(g.latitude);
   const lng = Number(g.longitude);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  // Hors zone d'exploitation = glitch GPS (0,0, saut aberrant) : un seul point
+  // corrompu ajouterait des milliers de km au trajet reconstruit.
+  if (!isInOperatingZone(lat, lng)) return null;
   const t = new Date(g.positionDateTime || p.receivedDateTime || p.createdDateTime || 0).getTime();
   const speed = Number(p.wheelBasedSpeed ?? g.speed ?? 0);
   return { lat, lng, speed: Number.isFinite(speed) ? speed : 0, t };

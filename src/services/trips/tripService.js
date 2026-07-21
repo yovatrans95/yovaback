@@ -23,9 +23,22 @@ const { geocodeTripEndpoints } = require('./geocode');
 const PROVIDERS = ['webfleet', 'quartix', 'optifleet'];
 const DAY_MS = 24 * 3600 * 1000;
 const TODAY_REFRESH_MS = 10 * 60_000; // re-synchro du jour courant au plus toutes les 10 min
+const GEOCODE_CONCURRENCY = 6;        // appels géocodage simultanés (BAN accepte ~50 req/s)
 
 // Throttle en mémoire du jour courant : "provider:YYYY-MM-DD" -> timestamp.
 const recentTodayFetches = new Map();
+
+// Applique `fn` à chaque élément avec un plafond de tâches simultanées.
+async function mapLimit(items, limit, fn) {
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const idx = cursor++;
+      await fn(items[idx], idx);
+    }
+  });
+  await Promise.all(workers);
+}
 
 function dayString(d) {
   const p = n => String(n).padStart(2, '0');
@@ -101,12 +114,13 @@ async function upsertTrips(trips) {
   if (!trips.length) return 0;
   const index = await buildVehicleIndex();
 
+  // Géocodage : poste le plus coûteux (1 à 2 appels HTTP externes par trajet, timeout 4 s).
+  // On le fait en parallèle borné AVANT les écritures, au lieu d'un par un en série.
+  // Mis en cache par site : les rotations re-géocodent rarement.
+  await mapLimit(trips, GEOCODE_CONCURRENCY, geocodeTripEndpoints);
+
   let upserted = 0;
   for (const trip of trips) {
-    // Adresse lisible pour les trajets qui n'ont que des coordonnées (Optifleet).
-    // Mis en cache par site : les rotations re-géocodent rarement.
-    await geocodeTripEndpoints(trip);
-
     const vehicle = matchVehicle(trip, index);
     const doc = {
       ...trip,
@@ -212,6 +226,15 @@ function ensureCoverage(range) {
   return coverageChain;
 }
 
+// Travail différé (refresh du jour courant) qui ne doit PAS retarder la réponse HTTP.
+// Sérialisé pour ménager le quota Optifleet, comme la chaîne de couverture.
+let backgroundChain = Promise.resolve();
+function runInBackground(task) {
+  backgroundChain = backgroundChain.then(task, task).catch(e =>
+    console.error('tâche arrière-plan échouée:', e.message)
+  );
+}
+
 async function doEnsureCoverage({ from, to }) {
   const errors = {};
   const fetched = [];
@@ -219,9 +242,10 @@ async function doEnsureCoverage({ from, to }) {
   const todayStart = startOfDay(now);
   const effectiveTo = to > now ? now : to;
 
-  for (const provider of PROVIDERS) {
+  // Les 3 fournisseurs sont des API indépendantes : on les interroge en parallèle.
+  await Promise.all(PROVIDERS.map(async provider => {
     try {
-      // 1) Jours passés manquants.
+      // 1) Jours passés manquants — bloquant : indispensable à un historique complet.
       const pastDays = daysInRange(from, effectiveTo).filter(d => d < todayStart);
       const pastKeys = pastDays.map(dayString);
       const covered = new Set(
@@ -236,23 +260,27 @@ async function doEnsureCoverage({ from, to }) {
         fetched.push(`${provider}:${dayString(range.from)}→${dayString(range.to)} (${trips.length})`);
       }
 
-      // 2) Jour courant (jamais "couvert") : re-synchro throttlée.
+      // 2) Jour courant (jamais "couvert") : re-synchro throttlée EN ARRIÈRE-PLAN.
+      // Les données du jour sont accessoires pour l'historique ; on ne bloque pas la
+      // réponse pour elles — elles apparaîtront au prochain chargement. Le throttle est
+      // posé tout de suite pour éviter de reprogrammer le même fetch en parallèle.
       if (effectiveTo >= todayStart) {
         const key = `${provider}:${dayString(todayStart)}`;
         const last = recentTodayFetches.get(key) || 0;
         if (Date.now() - last > TODAY_REFRESH_MS) {
           recentTodayFetches.set(key, Date.now());
           const dayFrom = from > todayStart ? from : todayStart;
-          const { trips } = await fetchProviderTrips(provider, dayFrom, effectiveTo);
-          await upsertTrips(trips);
-          fetched.push(`${provider}:aujourd'hui (${trips.length})`);
+          runInBackground(async () => {
+            const { trips } = await fetchProviderTrips(provider, dayFrom, effectiveTo);
+            await upsertTrips(trips);
+          });
         }
       }
     } catch (e) {
       errors[provider] = e.message;
       console.error(`❌ couverture ${provider}:`, e.message);
     }
-  }
+  }));
 
   return { errors, fetched };
 }
@@ -265,7 +293,7 @@ async function archiveTripsForRange({ from, to }) {
   let found = 0;
   let upserted = 0;
 
-  for (const provider of PROVIDERS) {
+  await Promise.all(PROVIDERS.map(async provider => {
     try {
       const { trips, complete } = await fetchProviderTrips(provider, from, to);
       found += trips.length;
@@ -275,7 +303,7 @@ async function archiveTripsForRange({ from, to }) {
       errors[provider] = e.message;
       console.error(`❌ trajets ${provider}:`, e.message);
     }
-  }
+  }));
 
   return { providerErrors: errors, found, upserted };
 }
